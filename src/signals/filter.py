@@ -90,16 +90,23 @@ class Filter_complex_flatspot(Filter):
             
         flatspotcurve=np.array(flatspotcurve)
 
-        windowsize=20
+        windowsize=10
         reach=int(windowsize/2)
         out=[]
         for i in range(reach):
             out.append(0)
-        for i in range(0+reach,deriv2.size-reach-1):
+        for i in range(reach,deriv2.size-reach-1):
             x=np.arange(i-reach,i+reach)
-            avrg=statistics.mean(flatspotcurve[x])
+            #avrg=statistics.mean(flatspotcurve[x])
+            avrg=0
+            for num in flatspotcurve[x]:
+                avrg=avrg+num
+            avrg=avrg/windowsize
             out.append(avrg)
         
-        flatspotcurve=np.array(out)
+        #flatspotcurve=np.array(out)
 
         return flatspotcurve
+
+
+#def filter_band_stop()

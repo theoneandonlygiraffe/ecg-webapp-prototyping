@@ -1,10 +1,13 @@
 import os
 import struct
+import fnmatch
 
 import numpy as np
 
+from functools import lru_cache
 
 
+@lru_cache(maxsize=5)
 def data_from_file_ptb(filepath):
     with open(filepath,"rb") as file:
         data_out=[]
@@ -28,3 +31,20 @@ def curve_from_file_ptb(filepath,num_curves,curve):
     
     return np.array(out)
 
+
+def find_files(pattern, path):
+    result = []
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if fnmatch.fnmatch(name, pattern):
+                result.append(os.path.join(root, name))
+    return result
+
+@lru_cache(maxsize=2)
+def find_files_type(pattern, path):
+    result = []
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if name.endswith( pattern):
+                result.append(os.path.join(root, name))
+    return result
