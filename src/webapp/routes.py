@@ -1,14 +1,17 @@
+from signalprocessing import frequencies
 from signals import utility
 from webapp import app
 import flask
+
+import ingest
+import signals
+import signalprocessing
 
 
 import matplotlib.pyplot as plt #pylint: disable=import-error
 import numpy as np
 import mpld3 #pylint: disable=import-error
-import ingest
-import signals
-import statistics
+
 
 from config import *
 
@@ -17,7 +20,8 @@ from numpy.polynomial import Polynomial
 from scipy.fft import rfft, rfftfreq
 
 from scipy import signal
-from scipy.signal import find_peaks #pylint: disable=import-error
+from scipy.signal import find_peaks
+import webapp #pylint: disable=import-error
 
 
 @app.route('/')
@@ -50,11 +54,11 @@ def show_ecg():
 
     string += files[sample_index]
 
-    buttonstring_next='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index+1)+"&signal_index="+str(signal_index)+"&filter=auto"+"'"+';"> > </button>'
-    buttonstring_prev='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index-1)+"&signal_index="+str(signal_index)+"&filter=auto"+"'"+';"> < </button>'
+    buttonstring_next='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index+1)+"&signal_index="+str(signal_index)+""+"'"+';"> > </button>'
+    buttonstring_prev='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index-1)+"&signal_index="+str(signal_index)+""+"'"+';"> < </button>'
 
-    buttonstring_up='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index)+"&signal_index="+str(signal_index-1)+"&filter=auto"+"'"+';"> - </button>'
-    buttonstring_down='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index)+"&signal_index="+str(signal_index+1)+"&filter=auto"+"'"+';"> + </button>'
+    buttonstring_up='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index)+"&signal_index="+str(signal_index-1)+""+"'"+';"> - </button>'
+    buttonstring_down='<button onclick="window.location.href='+"'/ecg_view?sample_index="+str(sample_index)+"&signal_index="+str(signal_index+1)+""+"'"+';"> + </button>'
     
     
     
@@ -77,26 +81,25 @@ def show_ecg():
     savgolfilter=global_savgolfilter_signal
 
     y=savgolfilter.filter(y)
+    #y=signalprocessing.frequencies.band_pass(y,1000.0,freq_trim=(0.01,50),order=3)
+
 
     newy=polyfilter.filter(y)
     x=np.arange(y.size)
 
     #ax.margins(0.05)
     fig.tight_layout(pad=0.03)   
-    #original curve 
-    #ax.plot(x,y,color="grey")
-    #ax.plot(x,np.zeros(x.size),"--",color="grey")
-    #polynomial
-    #ax.plot(x,polyfilter.getpoly(y)(x),color="green")
+
     #newcurve
     ax.plot(x,newy,color="grey")
     
     lead1=signals.signal.ECG_Lead(newy)
-    #ax.plot(lead1.events,newy[lead1.events],"X",color="black")
+
+    #plot beats
     ax.plot(lead1.R_peaks,lead1.data[lead1.R_peaks],"x",color="red")
 
 
-
+    #plot peaks
     ax.plot(lead1.peaks,lead1.data[lead1.peaks],"x",color="black")
     #ax.plot(lead1.peaks_neg,lead1.data[lead1.peaks_neg],"X",color="black")
 
@@ -124,62 +127,76 @@ def show_ecg():
     #ax.grid(color='white', linestyle='solid')
     #ax.set_title("Scatter Plot (with tooltips!)", size=20)
 
-    # Number of sample points
-    SAMPLE_RATE = 1000
-    N=7000
 
 
-    yf = rfft(lead1.data)[:500]**2
-    xf = rfftfreq(N, 1 / SAMPLE_RATE)[:500]
-    yf=np.abs(yf)
-    peaks_realx=find_peaks(yf,prominence=2000)[0]
-
-    peaks_frequency=xf[peaks_realx]#xf[] is important so frequency matches // shift between freq and "realworld" x
-    
-    plot_fft=axs[1]
-
-
-    plot_fft.plot(peaks_frequency,yf[peaks_realx],"x",color="red")#xf[] is important so frequency matches
-    plot_fft.plot(xf,yf,"-",color="blue")
-    
-    peaks_idx=peaks_realx[np.argsort(yf[peaks_realx])[:-1]]
-    peaks=xf[peaks_idx]
-    
-    plot_fft.plot(peaks,yf[peaks_idx],"x",color="green")
+    #fourier transform
+    peaks=signalprocessing.frequencies.freq_peaks(lead1.data,1000,freq_trim=(0,100),plt=axs[1])
 
     
 
-    #frq filter
+    #band stop filter
     orig=lead1.data
     filter_freq=flask.request.args.get('filter')
 
     if filter_freq:
-        if filter_freq=="auto":
-            freqs=peaks
-        else:
-            freqs=filter_freq.split()
+        low=float(filter_freq)-0.1
+        high=float(filter_freq)+0.1
 
-        for freq in freqs:
-            freq=float(freq)
+        orig=signalprocessing.frequencies.band_pass(orig,1000.0,freq_trim=(low,high),order=1)
 
-
-            fs = 1000.0  # Sample frequency (Hz)
-            f0 = freq  # Frequency to be removed from signal (Hz)
-            Q = 10.0  # Quality factor
-            # Design notch filter
-            b, a = signal.iirnotch(f0, Q, fs)
-
-            zi = signal.lfilter_zi(b, a)
-            z, _ = signal.lfilter(b, a, orig, zi=zi*orig[0])
-
-            z2, _ = signal.lfilter(b, a, z, zi=zi*z[0])
-
-            out = signal.filtfilt(b, a, orig)
-            orig=out
-
-        ax.plot(np.arange(out.size),out,"--",color="green")
+        ax.plot(np.arange(orig.size),orig,"--",color="green")
     
     string=string+mpld3.fig_to_html(fig)
-    string+="dominant freq:"+str(xf[peaks_idx[-1]])+"\n"
+    #string+="dominant freq:"+str(xf[peaks_idx[-1]])+"\n"
     string += "freq peaks:"+str(peaks)
     return string
+
+@app.route('/freq_single_lead')
+def show_freq_single_lead():
+
+    http_body,y=webapp.requests.wrap_temp_sample_switch("/freq_single_lead")
+
+    y=global_savgolfilter_signal.filter(y)
+    y=global_polyfilter_signal.filter(y)
+    x=np.arange(y.size)
+
+    #freqs
+    num_peaks=webapp.requests.int_request_argument('num_peaks',5)
+    #no protection
+    
+    #,figsize=(6, (2+num_peaks))
+    fig, axs = plt.subplots(2+num_peaks,1, dpi=265)
+
+    axs[1].plot(x,y,color="black")
+    peaks=signalprocessing.frequencies.freq_peaks(y,1000,freq_trim=(0,2),plt=axs[0],num_peaks=num_peaks)
+
+    for i in range(peaks.size):
+        plot=axs[peaks.size-i+1]
+
+        window_width=0.4
+
+        low=peaks[i]-window_width/2
+        high=peaks[i]+window_width/2
+
+        while 0>low:
+            low+=0.01
+            high-=0.01
+
+        
+
+        out=signalprocessing.frequencies.band_pass(y,1000.0,freq_trim=(low,high),order=1)
+
+        plot.set_title("Freq: "+str(peaks[i]), size=20)
+        #plot.grid("--",color='red')
+        g=0.2
+        b=0.2
+        r=1/peaks.size*(peaks.size-i)
+        plot.plot(np.arange(out.size),out,"-",color=(r,g,b,1.0))
+        
+
+
+
+
+
+    http_body+=mpld3.fig_to_html(fig)
+    return http_body

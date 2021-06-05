@@ -48,3 +48,17 @@ def find_files_type(pattern, path):
             if name.endswith( pattern):
                 result.append(os.path.join(root, name))
     return result
+
+def get_id_from_path(path):
+    folders=path.split("/")
+    sample_id = folders[-1].split(".")[0]
+    return sample_id
+
+def get_path_from_id(id,file_list):
+    if not id:
+        return False
+    for file in file_list:
+        sample_id=get_id_from_path(file)
+        if sample_id==id:
+            return file
+    return False
