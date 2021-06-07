@@ -119,32 +119,11 @@ def show_ecg():
                 x=np.arange(idx[i],idx[i+1])
                 poly=Polynomial.fit(x,lead1.data[x],1)
                 ax.plot(x,poly(x),color="red")
-    
-
-
-
-
-    #ax.grid(color='white', linestyle='solid')
-    #ax.set_title("Scatter Plot (with tooltips!)", size=20)
 
 
 
     #fourier transform
     peaks=signalprocessing.frequencies.freq_peaks(lead1.data,1000,freq_trim=(0,100),plt=axs[1])
-
-    
-
-    #band stop filter
-    orig=lead1.data
-    filter_freq=flask.request.args.get('filter')
-
-    if filter_freq:
-        low=float(filter_freq)-0.1
-        high=float(filter_freq)+0.1
-
-        orig=signalprocessing.frequencies.band_pass(orig,1000.0,freq_trim=(low,high),order=1)
-
-        ax.plot(np.arange(orig.size),orig,"--",color="green")
     
     string=string+mpld3.fig_to_html(fig)
     #string+="dominant freq:"+str(xf[peaks_idx[-1]])+"\n"
@@ -200,3 +179,95 @@ def show_freq_single_lead():
 
     http_body+=mpld3.fig_to_html(fig)
     return http_body
+
+@app.route('/vector_view')
+def show_vector_view():
+    http_body=""
+    files=ingest.ptbdiagnostic.find_files_type(".dat","../data")
+
+    sample_index=flask.request.args.get('sample_index')
+    if not sample_index:
+        sample_index=1
+    else:
+        sample_index=int(sample_index)
+    
+    sample_index=sample_index%len(files) 
+
+    http_body += files[sample_index]
+
+    buttonstring_next='<button onclick="window.location.href='+"'/vector_view?sample_index="+str(sample_index+1)+""+"'"+';"> > </button>'
+    buttonstring_prev='<button onclick="window.location.href='+"'/vector_view?sample_index="+str(sample_index-1)+""+"'"+';"> < </button>'
+    
+    
+    http_body =http_body+buttonstring_prev+buttonstring_next
+
+    ecg=[]
+    for i in range(12):
+        y=ingest.ptbdiagnostic.curve_from_file_ptb(files[sample_index],12,i)[:2000]
+        y=global_savgolfilter_signal.filter(y)
+        y=global_polyfilter_signal.filter(y)
+        ecg.append(y)
+    
+    num_rows=12
+    fig, axs = plt.subplots(num_rows,3, dpi=265)
+    gs = axs[0, 1].get_gridspec()
+    # remove the underlying axes
+    for i in range(num_rows):
+        axs[i,1].remove()
+        axs[i,2].remove()
+    vector_plot = fig.add_subplot(gs[:-6,-2:])
+    circle_plot = fig.add_subplot(gs[-6:,-2:])
+    circle_plot.set_aspect('equal', 'box')
+    #axbig.annotate('Big Axes \nGridSpec[1:, -1]', (0.1, 0.5), xycoords='axes fraction', va='center')
+    fig.tight_layout()
+
+
+
+    for i in range(6):
+        axs[i,0].plot(np.arange(ecg[i].size),ecg[i],"-",color="blue")
+    for i in range(6,num_rows):
+        axs[i,0].plot(np.arange(ecg[i].size),ecg[i],"-",color="grey")
+    
+
+
+    vect_list=np.zeros((ecg[0].size,2))
+    for i in range(6):
+        angle=-1*(0+(180/6)*i)
+        vect_direction=norm_vect(angle)*-1  
+        circle_plot.plot([0,vect_direction[0]*-1000],[0,vect_direction[1]*-1000],color="black")
+        out=[]
+        for val in ecg[i]:
+            out.append(vect_direction*val)
+        vect_list=vect_list+np.array(out)
+        
+    for i in range(0,np.size(vect_list,0),3):
+        vect=vect_list[i]
+        vector_plot.plot([i,vect[0]+i],[0,vect[1]],color="blue")
+
+    vector_plot.plot(np.arange(ecg[0].size),ecg[0],"-",color="red")
+
+    step=1
+    x=[]
+    y=[]
+    for i in range(step,np.size(vect_list,0),step):
+        vect=vect_list[i]
+        prev_vect=vect_list[i-step]
+        x.append(vect[0])
+        y.append(vect[1])
+    x=np.array(x)
+    y=np.array(y)
+    
+    
+    circle_plot.plot(x,y,color="orange")
+
+
+
+
+    http_body+=mpld3.fig_to_html(fig)
+    return http_body
+
+def norm_vect(angle):
+    rad=angle*(np.pi/180)
+    vect_direction=np.array([np.cos(rad),np.sin(rad)], dtype='f')
+    vect_direction=vect_direction/np.linalg.norm(vect_direction)
+    return vect_direction
