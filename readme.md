@@ -1,6 +1,7 @@
 # Citations and sources:
 
 ## PTB Diagnostic ECG Database:
+DB license: Open Data Commons Attribution License v1.0
 
 ### original publication:
 Bousseljot, R., Kreiseler, D., & Schnabel, A. (1995). Nutzung der EKG-Signaldatenbank CARDIODAT der PTB über das Internet. Biomedizinische Technik / Biomedical Engineering, 40(s1), 317-318.
